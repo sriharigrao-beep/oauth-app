@@ -1,0 +1,143 @@
+{
+  "jobId": "01a15aa9-0729-77a1-8a43-6c52f12b21f8",
+  "status": "completed",
+  "transport": "Native Firecrawl tool, not deployed UI",
+  "data": {
+    "name": "Notion",
+    "category": "Productivity and knowledge management API",
+    "difficulty": "Medium",
+    "summary": "Use a Notion public connection (Notion's provider-specific OAuth 2.0 integration) for an external production AI agent. Each end user authorizes individually and selects pages or databases in Notion's page picker; the agent then uses that user's token to read only the selected content. This is distinct from creating the connection/client and from optionally listing it in the Marketplace.",
+    "effort": "Unknown provider effort; planning estimate: 2–5 engineering days for a narrow pilot, plus security/product preparation for production.",
+    "effortNote": "The 2–5 day figure is a hands-on planning estimate, not a Notion commitment or published provider estimate. It assumes an existing HTTPS callback, secret storage, OAuth implementation, token persistence, and basic API integration. Notion's documentation does not publish implementation effort or review timelines.",
+    "wait": "Unknown",
+    "waitNote": "Provider wait is Unknown. Notion documents Marketplace submission and status tracking but does not state a review SLA. Marketplace review is not required to create and use a public connection; do not treat submission or approval as guaranteed.",
+    "audience": "External users who explicitly share selected Notion pages/databases with the AI agent; human users perform consent and page selection, while the agent's backend exchanges codes, stores tokens securely, and reads content. Workspace admins may control installation or permissions.",
+    "next": "Human owner: create a non-production Notion public connection in the Developer portal, choose Selected workspaces only for the pilot, register an HTTPS callback, and configure only Read content. Engineering: implement state-protected OAuth and read-only retrieval. Test with a user who has full access to a deliberately narrow page tree.",
+    "pilot": "Use a public connection with installation scope Selected workspaces only, which is not Marketplace-eligible. Register a staging callback and test each user authorization, page-picker selection, code exchange, token refresh, revocation/error handling, and page/block reads. Keep the agent read-only and validate that unshared pages fail closed.",
+    "production": "Create or configure a production public connection with an exact production HTTPS redirect URI and Read content only. Choose Any workspace only if broad installation is needed; it is Marketplace-eligible, but listing is a separate workflow. Deploy client credentials only server-side, encrypt tokens, log consent/resource identifiers without page content, and re-authorize users after capability changes.",
+    "sources": [
+      {
+        "title": "Notion Docs — Overview",
+        "url": "https://developers.notion.com/guides/get-started/overview",
+        "claim": "Identifies public connections as OAuth 2.0, distinguishes them from internal connections and PATs, and says public users select pages through the OAuth page picker; Marketplace review is separate from building a connection."
+      },
+      {
+        "title": "Notion Docs — Public connections",
+        "url": "https://developers.notion.com/guides/get-started/public-connections",
+        "claim": "Documents public-connection installation scopes, per-user tokens and authorization, page selection, creation fields, and retrieval of client ID/client secret in the Configuration tab."
+      },
+      {
+        "title": "Notion Docs — Authorization",
+        "url": "https://developers.notion.com/guides/get-started/authorization",
+        "claim": "Documents creating a public connection, redirect URIs, authorization URL, page picker, callback code, POST /v1/oauth/token with Basic client credentials, token storage, and OAuth error handling."
+      },
+      {
+        "title": "Notion Docs — Connection capabilities",
+        "url": "https://developers.notion.com/reference/capabilities",
+        "claim": "Defines Read content as access to existing workspace content, recommends minimum capabilities, and notes public users must re-authenticate after capability changes."
+      },
+      {
+        "title": "Notion Docs — List on the Marketplace",
+        "url": "https://developers.notion.com/guides/get-started/marketplace-listing",
+        "claim": "States that only Any workspace public connections are Marketplace-eligible, and describes separate listing submission/status tracking without publishing a review duration."
+      },
+      {
+        "title": "Notion API Reference — Retrieve a page",
+        "url": "https://developers.notion.com/reference/retrieve-a-page",
+        "claim": "Provides the read-page endpoint GET /v1/pages/{page_id} and bearer-token request pattern."
+      },
+      {
+        "title": "Notion API Reference — Retrieve block children",
+        "url": "https://developers.notion.com/reference/get-block-children",
+        "claim": "Provides GET /v1/blocks/{block_id}/children for reading page/block child content with a bearer token and pagination parameters."
+      }
+    ],
+    "steps": [
+      {
+        "title": "Resolve the integration type",
+        "detail": "Treat the provider as Notion and choose a public connection, not an internal connection or PAT: this scenario has external users and OAuth consent. Human product/security owner records the intended workspaces and read-only behavior.",
+        "owner": "Human product/security owner",
+        "source": 0
+      },
+      {
+        "title": "Create the provider OAuth client",
+        "detail": "In the Notion Developer portal, create a public connection. Supply connection details, an exact HTTPS redirect URI, installation scope, and capabilities. For the pilot choose Selected workspaces only; scope is chosen at creation and cannot later be changed.",
+        "owner": "Human developer/admin",
+        "source": 1
+      },
+      {
+        "title": "Select the narrow capability",
+        "detail": "Configure only Read content for an agent that reads explicitly shared pages. Do not request update, insert, comment, or user capabilities unless a separately documented feature requires them. Notion documents capabilities rather than a generic OAuth scope string.",
+        "owner": "Human security owner",
+        "source": 3
+      },
+      {
+        "title": "Protect client credentials",
+        "detail": "Retrieve the OAuth client ID and secret from the connection Configuration tab, keep the secret server-side in a secret manager, and never put it in browser code or version control. No authenticated setup or secret retrieval was attempted in this research.",
+        "owner": "Backend engineer",
+        "source": 1
+      },
+      {
+        "title": "Start consent with state",
+        "detail": "Send each user to the connection authorization URL with client_id, registered redirect_uri, response_type=code, and an unguessable state value. The user reviews capabilities and selects only intended pages/databases; the picker shows resources to which the user has full access.",
+        "owner": "Backend engineer; human user consents",
+        "source": 2
+      },
+      {
+        "title": "Handle callback and exchange code",
+        "detail": "Validate state and the exact callback, handle denial/error query parameters, then server-side POST the temporary code to https://api.notion.com/v1/oauth/token using HTTP Basic client credentials and the authorization_code grant. Store returned access and refresh tokens encrypted.",
+        "owner": "Backend engineer",
+        "source": 2
+      },
+      {
+        "title": "Read only authorized content",
+        "detail": "Use the user's bearer token to retrieve selected pages with GET /v1/pages/{page_id} and page contents through GET /v1/blocks/{block_id}/children; implement pagination and fail closed on unauthorized/unshared resources. Do not infer access beyond what the user selected.",
+        "owner": "Agent/backend engineer",
+        "source": 5
+      },
+      {
+        "title": "Separate production rollout from Marketplace",
+        "detail": "Promote only after consent, isolation, deletion, refresh, and least-privilege tests. If discovery in Notion is needed, separately create a Marketplace listing; it requires Any workspace and Notion review, but the docs give no approval guarantee or timeline.",
+        "owner": "Human release owner",
+        "source": 4
+      }
+    ],
+    "blockers": [
+      {
+        "title": "User must explicitly share resources",
+        "detail": "OAuth approval alone does not authorize arbitrary workspace pages: the user selects pages/databases, and the picker is limited to resources where the user has full access. Remedy: explain selection and test parent/child access boundaries."
+      },
+      {
+        "title": "Installation scope is immutable",
+        "detail": "Selected workspaces only cannot later become Any workspace. Remedy: use it for a controlled pilot and create a separate production public connection if broader installation is needed."
+      },
+      {
+        "title": "Capability changes trigger reauthorization",
+        "detail": "Changing public-connection capabilities requires users to re-authenticate. Remedy: freeze the read-only capability set before rollout and build a re-consent migration path."
+      },
+      {
+        "title": "Marketplace is a separate gate",
+        "detail": "Marketplace listing is not required for a usable public connection, but listing requires Any workspace and review. Remedy: launch direct/controlled installation first, or submit a separate listing without assuming approval or timing."
+      },
+      {
+        "title": "OAuth secrets and tokens are high impact",
+        "detail": "A leaked client secret or user token could enable unauthorized API calls. Remedy: keep exchanges server-side, encrypt tokens, restrict logs, rotate/revoke on incident, and never request secrets from users or this research process."
+      }
+    ],
+    "nuances": [
+      "Notion's term is public connection; it is the provider OAuth client/integration for this scenario.",
+      "Provider OAuth client registration, the Notion connection's capability configuration, and each end user's authorization are separate events.",
+      "The page picker can share a parent and thereby available child pages; test least-privilege resource boundaries.",
+      "A user receives an individual access token; another workspace member must authorize separately.",
+      "Any workspace is Marketplace-eligible; Selected workspaces only is not.",
+      "The API docs expose capabilities such as Read content, not a conventional list of OAuth scope names for this use case."
+    ],
+    "uncertainties": [
+      "No official documentation read here states provider review duration, approval probability, or a guaranteed Marketplace outcome; wait remains Unknown.",
+      "The requested app identifier is a provider name, not a Notion client ID; actual connection identity, redirect URI, capability state, and installation scope remain unverified because no authenticated console setup was attempted.",
+      "The docs describe page/database selection and read endpoints, but do not establish that every AI-agent indexing pattern or every nested/linked resource is automatically authorized; validate the exact content graph in a controlled workspace.",
+      "The OAuth token reference URL searched during research returned a Notion Page Not Found page; the Authorization guide was used for the token endpoint details instead.",
+      "Production retention, deletion, refresh-token rotation behavior, rate limits, and enterprise admin approval requirements were not established by the official pages read; confirm them before launch."
+    ]
+  }
+}

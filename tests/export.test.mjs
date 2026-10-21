@@ -1,0 +1,18 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+import {guides} from '../src/guides.mjs';
+import {validGuide,researchRoute} from '../src/research.mjs';
+process.env.NODE_ENV='test';process.env.PUBLIC_ORIGIN='https://backend.example';process.env.ALLOWED_ORIGIN='https://developer.github.io';
+const {handle}=await import('../server.mjs');
+const req=(body,key='fc-TESTKEY000000000')=>new Request('https://backend.example/api/research',{method:'POST',headers:{origin:'https://developer.github.io','x-research-key':key},body:JSON.stringify(body)});
+test('seed guides and source indices validate',()=>guides.forEach(g=>assert.ok(validGuide(g))));
+test('HTML inline script has valid syntax',()=>{const html=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');new vm.Script(html.match(/<script>([\s\S]*)<\/script>/)[1]);assert.ok(!html.includes('/* GUIDE_DATA */'))});
+test('reject invalid citations and unsafe URLs',()=>{assert.equal(validGuide({...guides[0],steps:[{title:'a',detail:'b',owner:'c',source:99}]}),false);assert.equal(validGuide({...guides[0],sources:[{title:'a',url:'javascript:alert(1)',claim:'b'}]}),false)});
+test('missing research credential rejected before fetch',async()=>{const r=await researchRoute(req({app:'Notion'},''),()=>{throw Error('must not call')},'https://developer.github.io');assert.equal(r.status,401)});
+test('allowed Pages origin can start bounded upstream job',async()=>{let payload;const r=await researchRoute(req({app:'Notion'}),async(url,options)=>{payload=JSON.parse(options.body);return Response.json({success:true,id:'test-job-123456'})},'https://developer.github.io');assert.equal(r.status,200);assert.equal(payload.maxCredits,100);assert.equal((await r.json()).id,'test-job-123456')});
+test('origin mismatch denied',async()=>{assert.equal((await researchRoute(req({app:'Notion'}),fetch,'https://other.example')).status,403)});
+test('failed and malformed completed output do not become guides',async()=>{for(const result of [{status:'failed'},{status:'completed',data:{}}]){const r=await researchRoute(req({app:'Notion'}),async()=>Response.json(result),'https://developer.github.io');const b=await r.json();assert.equal(b.status,'failed');assert.equal(b.guide,undefined)}});
+test('CORS preflight allows exact origin only',async()=>{const r=await handle(new Request('https://backend.example/api/research',{method:'OPTIONS',headers:{origin:'https://developer.github.io'}}));assert.equal(r.status,204);assert.equal(r.headers.get('access-control-allow-origin'),'https://developer.github.io');assert.equal((await handle(new Request('https://backend.example/api/research',{method:'OPTIONS',headers:{origin:'https://evil.example'}}))).status,403)});
+test('serves HTML but not source or environment files',async()=>{assert.equal((await handle(new Request('https://backend.example/'))).status,200);for(const p of ['/src/research.mjs','/.env','/README.md'])assert.equal((await handle(new Request('https://backend.example'+p))).status,404)});
